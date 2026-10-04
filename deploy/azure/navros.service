@@ -1,0 +1,18 @@
+[Unit]
+Description=NAVROS - automejora continua
+After=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__REPO__
+Environment=NAVROS_COMPILE=1
+Environment=PYTHONUNBUFFERED=1
+# rounds=0: continúa hasta max_level. Cada ronda guarda checkpoint, así que tras un
+# reinicio (o un desalojo de VM Spot) retoma exactamente donde iba.
+ExecStart=__REPO__/.venv/bin/python -m navros improve --run __RUN__ --rounds 0
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

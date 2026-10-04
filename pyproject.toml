@@ -1,0 +1,20 @@
+[project]
+name = "navros"
+version = "0.1.0"
+description = "NAVROS: un modelo de lenguaje que se entrena, se evalúa y crece por sí mismo"
+requires-python = ">=3.10"
+dependencies = ["torch>=2.3", "numpy"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+modal = ["modal"]
+quantum = ["qiskit", "qiskit-ibm-runtime"]
+
+[project.scripts]
+navros = "navros.cli:main"
+
+[tool.setuptools]
+packages = ["navros"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
