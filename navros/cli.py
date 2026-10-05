@@ -27,6 +27,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--preset", default="small", choices=["tiny", "mini", "small", "base", "large"])
     p.add_argument("--corpus", nargs="*", default=None, help="textos para su tokenizador/corpus")
     p.add_argument("--mode", choices=["verifier", "consensus"], default=None)
+    p.add_argument("--skill", choices=["suma", "http"], default="suma",
+                   help="habilidad verificable que practica (http: escribir peticiones para el agente)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--force", action="store_true", help="sobrescribe una ejecución existente")
 
@@ -65,6 +67,22 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--qubits", type=int, default=4)
     p.add_argument("--layers", type=int, default=2)
 
+    p = cmd("agent", "el modelo resuelve una tarea haciendo peticiones HTTP (política de seguridad)")
+    p.add_argument("task")
+    p.add_argument("--allow", action="append", required=True, metavar="HOST",
+                   help="host permitido, repetible; admite *.dominio. Sin lista no se permite ninguna petición")
+    p.add_argument("--method", action="append", choices=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+                   help="métodos permitidos (por defecto solo GET y HEAD)")
+    p.add_argument("--port", action="append", type=int, help="puertos permitidos además de 80/443")
+    p.add_argument("--insecure-http", action="store_true", help="permite http:// además de https://")
+    p.add_argument("--allow-private-network", action="store_true",
+                   help="permite IPs privadas/loopback (desactiva la defensa anti-SSRF)")
+    p.add_argument("--bearer", action="append", default=[], metavar="HOST=VARIABLE",
+                   help="envía «Authorization: Bearer $VARIABLE» solo a ese host y solo por https")
+    p.add_argument("--steps", type=int, default=6)
+    p.add_argument("--obs-chars", type=int, default=400, help="máx. de caracteres de cada respuesta que ve el modelo")
+    p.add_argument("--log", default=None, help="auditoría JSONL (por defecto <run>/agent.jsonl)")
+
     a = ap.parse_args(argv)
 
     if a.cmd == "quantum" and a.action == "demo":
@@ -75,7 +93,7 @@ def main(argv: list[str] | None = None) -> None:
     if a.cmd == "init":
         if (Path(a.run) / "model.pt").exists() and not a.force:
             raise SystemExit(f"{a.run} ya existe (usa --force para sobrescribir o 'improve' para continuar)")
-        cfg = preset_config(a.preset, seed=a.seed)
+        cfg = preset_config(a.preset, seed=a.seed, skill=a.skill)
         if a.mode:
             cfg.improve.mode = a.mode
         nav = Navros.create(a.run, cfg, a.corpus if a.corpus is not None else _corpus_default())
@@ -109,6 +127,38 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "quantum":
         nav.attach_quantum(a.qubits, a.layers)
         print(nav.status())
+    elif a.cmd == "agent":
+        _run_agent(nav, a)
+
+
+def _run_agent(nav, a) -> None:
+    import os
+    import sys
+
+    from .agent import Agent, NavrosAgentModel
+    from .httptool import HttpPolicy, HttpTool
+
+    if nav.cfg.skill != "http":
+        print(f"aviso: este modelo practica '{nav.cfg.skill}' y no ha aprendido a escribir peticiones "
+              "(créalo con: init --skill http)", file=sys.stderr)
+    credentials = {}
+    for spec in a.bearer:
+        host, _, var = spec.partition("=")
+        if not host or not var or var not in os.environ:
+            raise SystemExit(f"--bearer {spec!r}: usa HOST=VARIABLE y define esa variable de entorno")
+        credentials[host.lower()] = {"authorization": f"Bearer {os.environ[var]}"}
+    policy = HttpPolicy(
+        allow_hosts=tuple(a.allow), methods=tuple(a.method or ("GET", "HEAD")),
+        schemes=("https", "http") if a.insecure_http else ("https",),
+        ports=(80, 443, *(a.port or ())), allow_private=a.allow_private_network, credentials=credentials)
+    http = HttpTool(policy, log_path=a.log or Path(a.run) / "agent.jsonl")
+    agent = Agent(NavrosAgentModel(nav), http, max_steps=a.steps, max_observation_chars=a.obs_chars)
+    result = agent.run(a.task)
+    for i, step in enumerate(result.steps, 1):
+        print(f"[{i}] {step.output}" + (f"\n{step.observation}" if step.observation else ""))
+    if result.stop != "final":
+        raise SystemExit(f"\nsin respuesta final ({result.stop})")
+    print(f"\nrespuesta: {result.answer}")
 
 
 def _quantum_demo(n_qubits: int, n_layers: int) -> None:

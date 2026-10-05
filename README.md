@@ -23,6 +23,7 @@ Todo es código propio en PyTorch, sin modelos preentrenados de terceros.
 | **Asimila otros modelos** | Destilación de logits (mismo tokenizador), destilación de secuencias (cualquier modelo) y fusión de pesos. | `navros/distill.py`, `Navros.assimilate` |
 | **Absorbe conocimiento** | `ingest` añade textos al corpus, amplía el tokenizador si hace falta y entrena con ellos. | `Navros.ingest` |
 | **Lista para lo cuántico** | Circuito variacional diferenciable, capa híbrida, exportación a OpenQASM, gradientes *parameter-shift* y backends intercambiables. | `navros/quantum.py` |
+| **Actúa como agente HTTP** | Bucle tarea → petición → resultado → respuesta, con un ejecutor seguro por omisión (hosts permitidos, anti-SSRF, límites, auditoría) y una habilidad verificable para aprender a escribir peticiones. | `navros/agent.py`, `navros/httptool.py`, [`docs/AGENTE.md`](docs/AGENTE.md) |
 
 Cómo se relaciona cada pieza con las técnicas publicadas detrás de los modelos
 actuales: [`docs/AUTOMEJORA.md`](docs/AUTOMEJORA.md). Estado real de la
@@ -113,7 +114,7 @@ drivers NVIDIA.
 
 | Comando | Qué hace |
 |---|---|
-| `init --preset {tiny,mini,small,base,large} [--mode consensus]` | Crea NAVROS desde cero |
+| `init --preset {tiny,mini,small,base,large} [--mode consensus] [--skill {suma,http}]` | Crea NAVROS desde cero |
 | `improve --rounds N [--hours H]` | Rondas de automejora (`N=0`: continuo) |
 | `status` | Estado, crecimiento e historial con la exactitud por nivel |
 | `solve 123+456` / `generate "texto"` | Usar el modelo |
@@ -122,6 +123,7 @@ drivers NVIDIA.
 | `assimilate --teacher runs/otro` | Aprende de otro NAVROS (destilación) |
 | `merge --with runs/otro` | Fusiona pesos con otro NAVROS del mismo linaje |
 | `quantum demo` / `quantum attach --qubits 4` | Simulador y QASM / capa cuántica en el modelo |
+| `agent "tarea" --allow host [--method POST] [--bearer HOST=VAR]` | El modelo resuelve la tarea haciendo peticiones HTTP, solo a los hosts permitidos |
 
 Todos aceptan `--run DIR` (por defecto `runs/navros`).
 
@@ -141,11 +143,13 @@ Todos aceptan `--run DIR` (por defecto `runs/navros`).
 navros/
   tokenizer.py   BPE propio, extensible
   model.py       transformer + crecimiento que preserva la función + Abacus
-  skills.py      habilidades verificables (suma; añade las tuyas)
+  skills.py      habilidades verificables (suma, http; añade las tuyas)
   trainer.py     datos, entrenamiento (AMP, torch.compile), evaluación
   core.py        el motor de automejora, presets, ingesta y asimilación
   distill.py     destilación, licencias y fusión de pesos
   quantum.py     simulador, circuito variacional, QASM, backends
+  httptool.py    ejecutor HTTP seguro por omisión (política, anti-SSRF, auditoría)
+  agent.py       protocolo del agente, bucle y adaptador a NAVROS
   cli.py         python -m navros …
 deploy/          Modal, Azure (setup + systemd), Kaggle (notebook)
 docs/            AUTOMEJORA.md, CUANTICA.md
@@ -155,9 +159,11 @@ tests/           31 pruebas
 ### Añadir una habilidad
 
 Implementa el protocolo `Skill` de `navros/skills.py` (`make_problem`,
-`prompt`, `target`, `answer_of`, `verify`, …) y regístrala en `SKILLS`.
+`prompt`, `target`, `answer_of`, `verify`, `unit`, …) y regístrala en `SKILLS`.
 Cualquier tarea con verificador automático sirve: aritmética, álgebra, lógica,
-código con pruebas unitarias, etc.
+código con pruebas unitarias, peticiones HTTP, etc. `unit` dice qué mide el nivel
+(`dígitos`, `parámetros`…) y `answer_of` debe devolver una *completion válida*: el
+modo `consensus` la guarda tal cual como dato de entrenamiento.
 
 ## Límites, con franqueza
 
@@ -170,6 +176,10 @@ código con pruebas unitarias, etc.
   abiertos con licencia permisiva.
 - NAVROS no extrae ni destila a Claude ni a otros modelos comerciales: sus
   términos lo prohíben. Lo que sí implementa son los métodos publicados.
+- El agente HTTP es seguro por omisión (no permite nada hasta que listas hosts),
+  pero ninguna política evita la inyección de instrucciones desde una página
+  permitida, y hoy NAVROS solo aprende a *escribir* la petición, no a decidir qué
+  pedir en una tarea abierta ([`docs/AGENTE.md`](docs/AGENTE.md)).
 - La capa cuántica funciona en simulación y exporta circuitos a hardware real,
   pero hoy no hay ventaja cuántica demostrada para entrenar redes neuronales
   ([`docs/CUANTICA.md`](docs/CUANTICA.md)).
