@@ -115,6 +115,41 @@ turno (la tarea + salto de línea), de modo que lo aprendido se aplica tal cual.
 > Usa un preset `small` o mayor. Con `tiny`/`mini` la ventana (64/96 tokens) no
 > cabe una petición y la generación se corta antes de terminar; `init` te avisa.
 
+## Resultado medido
+
+Solo se le enseñan órdenes con **1 a 3** parámetros de consulta; el resto lo aprende de
+sus propios intentos verificados. CPU, arquitectura `mini` (188k parámetros) con la
+ventana ampliada a 192 tokens, 4 rondas (≈18 min en total):
+
+| Versión | Frontera | 3 par. | 4 par. | 5 par. | 6 par. | 7 par. |
+|---|---|---|---|---|---|---|
+| v0: solo se le enseñó 1–3 | 4 | 100 % | 4 % | 0 % | — | — |
+| v1 | 4 | 99 % | 87 % | 0 % | — | — |
+| v2 | 5 | 100 % | 98 % | 8 % | 0 % | — |
+| v3 | 6 | 100 % | 99 % | 95 % | 3 % | 0 % |
+| **v4** | **6** | **100 %** | **99 %** | **95 %** | **26 %** | **0 %** |
+
+Generó y verificó él mismo 932 ejemplos (`pool.jsonl`, origen `self:verifier`): 493 de
+4–6 parámetros, es decir, más allá de lo que se le enseñó, y el resto es repaso de 1–3.
+
+Cómo leerlo, con sus límites: una sola ejecución, una semilla, 100 problemas de
+evaluación por nivel (≈ ±5 puntos); el nivel 6 aún no está dominado y el 7 no se ha
+alcanzado. Lo que demuestra es que **el formato de la petición se aprende y se extiende
+solo con un verificador**, no que NAVROS sepa decidir qué pedir.
+
+Para repetirlo (el preset `mini` por defecto tiene una ventana de 96 tokens, que no basta):
+
+```python
+from navros.core import Navros, preset_config
+cfg = preset_config("mini", skill="http")
+cfg.model.max_seq_len, cfg.tokenizer_merges, cfg.pretrain_steps = 192, 300, 1500
+cfg.improve.problems_per_round, cfg.improve.steps_per_round, cfg.improve.eval_problems = 512, 300, 100
+nav = Navros.create("runs/http", cfg, corpus=["README.md", "docs"])
+nav.improve(4)
+print(nav.solve("obtén api.example.com/v1/items con id=7 lang=es"))
+# obtén api.example.com/v1/items con id=7 lang=es → GET https://api.example.com/v1/items?id=7&lang=es ✓
+```
+
 ## Qué aprende hoy, con franqueza
 
 La habilidad enseña el **primer paso** (escribir una petición bien formada a partir

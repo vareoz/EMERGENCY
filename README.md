@@ -67,7 +67,7 @@ python -m navros init --preset mini            # CPU: tokenizador + pesos + pree
 python -m navros improve --rounds 10           # automejora (reanudable en cualquier momento)
 python -m navros status                        # versión, linaje, exactitud por nivel
 python -m navros solve 123456+987654
-python -m pytest -q                            # 31 pruebas, ~5 s
+python -m pytest -q                            # 138 pruebas, ~15 s
 ```
 
 ## Dónde correrlo
@@ -153,7 +153,7 @@ navros/
   cli.py         python -m navros …
 deploy/          Modal, Azure (setup + systemd), Kaggle (notebook)
 docs/            AUTOMEJORA.md, CUANTICA.md
-tests/           31 pruebas
+tests/           138 pruebas
 ```
 
 ### Añadir una habilidad
