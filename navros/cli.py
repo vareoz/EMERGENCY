@@ -65,10 +65,19 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--qubits", type=int, default=4)
     p.add_argument("--layers", type=int, default=2)
 
+    p = cmd("dashboard", "panel local: observa en vivo y arranca/detén/borra el modelo")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8777)
+    p.add_argument("--log", default=None, help="ruta del registro a mostrar (por defecto <run>/train.log)")
+
     a = ap.parse_args(argv)
 
     if a.cmd == "quantum" and a.action == "demo":
         return _quantum_demo(a.qubits, a.layers)
+
+    if a.cmd == "dashboard":
+        from .dashboard import serve
+        return serve(a.run, host=a.host, port=a.port, log_path=a.log)
 
     from .core import Navros, NavrosTeacher, preset_config
 

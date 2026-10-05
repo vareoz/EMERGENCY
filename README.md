@@ -122,8 +122,24 @@ drivers NVIDIA.
 | `assimilate --teacher runs/otro` | Aprende de otro NAVROS (destilación) |
 | `merge --with runs/otro` | Fusiona pesos con otro NAVROS del mismo linaje |
 | `quantum demo` / `quantum attach --qubits 4` | Simulador y QASM / capa cuántica en el modelo |
+| `dashboard [--port 8777] [--host 127.0.0.1]` | Panel web local: observa en vivo y arranca/detén/borra el modelo |
 
 Todos aceptan `--run DIR` (por defecto `runs/navros`).
+
+### Panel local
+
+```bash
+python -m navros dashboard            # abre http://127.0.0.1:8777
+```
+
+Sin dependencias extra (solo la librería estándar) y sin recursos externos, así
+que funciona offline. Se refresca solo y muestra versión, frontera, parámetros,
+exactitud real por nivel, la gráfica de crecimiento y el registro en vivo. Tres
+botones: **Arrancar**, **Detener** y **Desaparecer** (borra la ejecución
+entera). El panel es el dueño del proceso que arranca, detecta un entrenamiento
+externo ya en curso y evita lanzar un segundo escritor sobre la misma ejecución.
+La caja «Ingestar» la dispara una persona (pega un texto o una URL): NAVROS no
+hace peticiones de red por su cuenta.
 
 ### Modos de automejora
 
