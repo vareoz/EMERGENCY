@@ -190,7 +190,15 @@ class Navros:
         nav = cls(run_dir, cfg, tok, model, state, log)
         log(f"[NAVROS] modelo inicial: {model.num_params():,} parámetros en {nav.device}; "
             f"vocabulario {tok.vocab_size}")
-        log(f"[NAVROS] preentrenamiento: suma de 1 a {cfg.seed_level} dígitos con respuestas de referencia")
+        rng = random.Random(cfg.seed)
+        probe = [nav.skill.make_problem(rng, cfg.seed_level) for _ in range(32)]
+        longest = max(len(tok.encode(nav.skill.prompt(p), bos=True)) + len(tok.encode(nav.skill.target(p), eos=True))
+                      for p in probe)
+        if longest > cfg.model.max_seq_len:  # la generación se corta en max_seq_len: nunca acertaría
+            log(f"[NAVROS] AVISO: los ejemplos de '{cfg.skill}' miden hasta {longest} tokens y la ventana es de "
+                f"{cfg.model.max_seq_len}; no podrá completar respuestas. Usa un preset mayor (small o más).")
+        log(f"[NAVROS] preentrenamiento: {cfg.skill} de 1 a {cfg.seed_level} {nav.skill.unit} "
+            "con respuestas de referencia")
         train(model, nav._mixture(pool=False), cfg.pretrain_steps, cfg.train, log=log,
               log_every=max(cfg.pretrain_steps // 10, 1))
         nav._record("creación", {"params": model.num_params(), "vocab": tok.vocab_size})
@@ -350,7 +358,7 @@ class Navros:
     def improve_round(self) -> dict:
         ic, st, sk = self.cfg.improve, self.state, self.skill
         L, k, t0 = st["level"], st["k"], time.time()
-        self.log(f"\n[NAVROS] ronda v{st['version'] + 1} · nivel frontera {L} dígitos · "
+        self.log(f"\n[NAVROS] ronda v{st['version'] + 1} · nivel frontera {L} {sk.unit} · "
                  f"modo {ic.mode} · k={k} · lr={st['lr']:.2e} · {self.model.num_params():,} params")
         base_score, base_levels = self.score(self.model)
 
@@ -397,7 +405,7 @@ class Navros:
         if levels.get(L, 0) >= ic.advance_threshold:
             st["level"] = L + 1
             st["plateau"] = 0
-            self.log(f"  ★ dominó {L} dígitos → nueva frontera: {L + 1}")
+            self.log(f"  ★ dominó {L} {sk.unit} → nueva frontera: {L + 1}")
         # k se adapta al rendimiento EN LA FRONTERA (el repaso casi siempre acierta)
         if front_yield < 0.15:
             st["k"] = min(k * 2, 64)
@@ -420,7 +428,7 @@ class Navros:
         self.save()
         self.log("  " + ("aceptado" if accepted else "rechazado (se conserva la versión anterior)")
                  + f" · exactitud real por nivel: "
-                 + " ".join(f"{a}d={b:.0%}" for a, b in oracle.items()))
+                 + " ".join(f"{a}{sk.unit[0]}={b:.0%}" for a, b in oracle.items()))
         return entry
 
     # -- crecimiento -------------------------------------------------------------------
@@ -548,16 +556,16 @@ class Navros:
         return prompt + self.tok.decode(out[0])
 
     def status(self) -> str:
-        st, m = self.state, self.model.cfg
+        st, m, unit = self.state, self.model.cfg, self.skill.unit
         lines = [f"NAVROS · {self.run_dir}",
-                 f"  versión {st['version']} · frontera {st['level']} dígitos · modo {self.cfg.improve.mode}",
+                 f"  versión {st['version']} · frontera {st['level']} {unit} · modo {self.cfg.improve.mode}",
                  f"  {self.model.num_params():,} parámetros · capas {m.n_layers} · cabezas {m.n_heads} · "
                  f"MLP {m.mlp_hidden} · d_model {m.d_model} · vocab {m.vocab_size}"
                  + (f" · adaptador cuántico {m.quantum_qubits} qubits" if m.quantum_qubits else ""),
                  f"  lr {st['lr']:.2e} · k {st['k']} · crecimientos {st['growths']} · "
                  f"datos propios {len(self._pool()):,}"]
         for h in st["history"][-10:]:
-            orc = " ".join(f"{a}d={b:.0%}" for a, b in h["oracle"].items())
+            orc = " ".join(f"{a}{unit[0]}={b:.0%}" for a, b in h["oracle"].items())
             lines.append(f"  v{h['version']:>3} {'✓' if h['accepted'] else '·'} "
                          f"{h['score_before']:.3f}→{h['score_after']:.3f} frontera {h.get('frontier_yield', 0):.0%} | {orc}"
                          + (f" | creció {h['grew']}" if h.get("grew") else ""))
